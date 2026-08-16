@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+ 
+# Môi trường ảo
+venv/
+env/
+.venv/
+ 
+# IDE
+.vscode/
+.idea/
+ 
+# Hệ điều hành
+.DS_Store
+Thumbs.db
+ 
+# Log cá nhân
+*.log
+ 
