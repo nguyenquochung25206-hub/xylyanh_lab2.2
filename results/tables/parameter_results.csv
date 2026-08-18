@@ -1,0 +1,11 @@
+experiment,sigma,low_threshold,high_threshold,edge_density_percent,processing_time_ms
+sigma,0.5,100,200,1.932,4.488
+sigma,1.0,100,200,1.939,2.869
+sigma,1.5,100,200,1.8,0.77
+sigma,2.0,100,200,1.772,1.528
+sigma,3.0,100,200,1.803,0.794
+threshold,1.0,50,100,1.939,1.36
+threshold,1.0,50,150,1.939,1.358
+threshold,1.0,100,200,1.939,1.144
+threshold,1.0,100,250,1.939,0.962
+threshold,1.0,150,300,1.481,3.28

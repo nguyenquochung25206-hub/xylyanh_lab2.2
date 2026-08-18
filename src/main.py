@@ -1,72 +1,289 @@
 import argparse
-import os
+from pathlib import Path
+
 import cv2
 
 from src.edge_detection.canny_opencv import detect_edges as canny_opencv
 from src.edge_detection.canny_skimage import canny_skimage
-from src.edge_detection.sobel import detect_edges as sobel_edge
-from src.edge_detection.laplacian import detect_edges as laplacian_edge
-from src.visualization.save_results import save_result
+from src.edge_detection.sobel import detect_edges as sobel
+from src.edge_detection.laplacian import detect_edges as laplacian
 
-METHODS = {
-    "opencv": canny_opencv,
-    "skimage": canny_skimage,
-    "sobel": sobel_edge,
-    "laplacian": laplacian_edge,
+
+SUPPORTED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".bmp",
+    ".webp",
 }
 
 
-def load_image(path):
-    image = cv2.imread(path)
-    if image is None:
-        raise FileNotFoundError(f"Không đọc được ảnh: {path}")
-    return image
+def get_input_images(input_path):
+    """
+    Nhận file ảnh hoặc thư mục chứa ảnh.
+
+    Nếu là file:
+        trả về [file]
+
+    Nếu là thư mục:
+        tìm tất cả ảnh bên trong.
+    """
+
+    path = Path(input_path)
+
+    if not path.exists():
+        raise FileNotFoundError(
+            f"Không tồn tại đường dẫn: {path}"
+        )
+
+    # Nếu input là một file ảnh
+    if path.is_file():
+
+        if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            raise ValueError(
+                f"File không phải ảnh: {path}"
+            )
+
+        return [path]
+
+    # Nếu input là thư mục
+    if path.is_dir():
+
+        images = sorted(
+            file
+            for file in path.iterdir()
+            if file.is_file()
+            and file.suffix.lower() in SUPPORTED_EXTENSIONS
+        )
+
+        if not images:
+            raise FileNotFoundError(
+                f"Không tìm thấy ảnh trong: {path}"
+            )
+
+        return images
+
+    raise ValueError(
+        f"Input không hợp lệ: {path}"
+    )
 
 
-def run_pipeline(input_path, output_path, method, sigma, low, high):
-    image = load_image(input_path)
+def run_method(
+    image,
+    method,
+    sigma,
+    low,
+    high
+):
+    """
+    Chọn thuật toán xử lý ảnh.
+    """
 
-    # Edge detection — truyền ảnh gốc (BGR), mỗi hàm tự lo tiền xử lý bên trong
     if method == "opencv":
-        edges = canny_opencv(image, low_threshold=low, high_threshold=high, sigma=sigma)
-    elif method == "skimage":
-        # canny_skimage dùng color.rgb2gray() bên trong, vốn kỳ vọng thứ tự
-        # kênh RGB — trong khi cv2.imread() trả về BGR. Cần đổi thứ tự kênh
-        # trước khi truyền vào, nếu không trọng số grayscale sẽ bị sai
-        # (đổi chỗ kênh đỏ/xanh dương), khiến kết quả so sánh OpenCV vs
-        # Scikit-image không công bằng.
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        edges = canny_skimage(image_rgb, sigma=sigma)
-    else:
-        edges = METHODS[method](image, sigma=sigma)
 
-    save_result(edges, output_path)
-    print(f"[OK] Đã lưu: {output_path}")
+        return canny_opencv(
+            image,
+            low_threshold=low,
+            high_threshold=high,
+            sigma=sigma
+        )
+
+    elif method == "skimage":
+
+        return canny_skimage(
+            image,
+            sigma=sigma,
+            low_threshold=low,
+            high_threshold=high
+        )
+
+    elif method == "sobel":
+
+        return sobel(
+            image,
+            kernel_size=3,
+            sigma=sigma
+        )
+
+    elif method == "laplacian":
+
+        return laplacian(
+            image,
+            kernel_size=3,
+            sigma=sigma
+        )
+
+    else:
+
+        raise ValueError(
+            f"Method không hợp lệ: {method}"
+        )
 
 
 def main():
+
     parser = argparse.ArgumentParser(
-        description="Canny Edge Detection Pipeline")
-    parser.add_argument("--input", required=True)
-    parser.add_argument("--output", default=None)
+        description=(
+            "Image Edge Detection - "
+            "Canny OpenCV / Canny Scikit-image / "
+            "Sobel / Laplacian"
+        )
+    )
+
+    parser.add_argument(
+        "--input",
+        required=True,
+        help=(
+            "Đường dẫn đến một ảnh "
+            "hoặc thư mục chứa ảnh"
+        )
+    )
+
+    parser.add_argument(
+        "--output",
+        default="results",
+        help="Thư mục lưu kết quả"
+    )
+
     parser.add_argument(
         "--method",
-        choices=METHODS.keys(),
-        default="opencv")
-    parser.add_argument("--sigma", type=float, default=1.0)
-    parser.add_argument("--low", type=int, default=100)
-    parser.add_argument("--high", type=int, default=200)
+        choices=[
+            "opencv",
+            "skimage",
+            "sobel",
+            "laplacian"
+        ],
+        default="opencv",
+        help="Thuật toán phát hiện cạnh"
+    )
+
+    parser.add_argument(
+        "--sigma",
+        type=float,
+        default=1.0,
+        help="Sigma của Gaussian Blur"
+    )
+
+    parser.add_argument(
+        "--low",
+        type=float,
+        default=50,
+        help="Low threshold của Canny"
+    )
+
+    parser.add_argument(
+        "--high",
+        type=float,
+        default=150,
+        help="High threshold của Canny"
+    )
+
     args = parser.parse_args()
-    if args.output is None:
-        name = os.path.splitext(os.path.basename(args.input))[0]
-        args.output = f"data/output/{args.method}/{name}_{args.method}.png"
-    run_pipeline(
-        args.input,
-        args.output,
-        args.method,
-        args.sigma,
-        args.low,
-        args.high)
+
+    # --------------------------------
+    # Lấy danh sách ảnh
+    # --------------------------------
+
+    images = get_input_images(
+        args.input
+    )
+
+    print()
+    print("=" * 60)
+    print("IMAGE EDGE DETECTION")
+    print("=" * 60)
+    print(f"Input       : {args.input}")
+    print(f"Method      : {args.method}")
+    print(f"Sigma       : {args.sigma}")
+    print(f"Low         : {args.low}")
+    print(f"High        : {args.high}")
+    print(f"Số lượng ảnh: {len(images)}")
+    print("=" * 60)
+    print()
+
+    # --------------------------------
+    # Tạo thư mục output
+    # --------------------------------
+
+    output_dir = (
+        Path(args.output)
+        / args.method
+    )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    # --------------------------------
+    # Xử lý từng ảnh
+    # --------------------------------
+
+    for index, image_path in enumerate(
+        images,
+        start=1
+    ):
+
+        print(
+            f"[{index}/{len(images)}] "
+            f"Đang xử lý: {image_path.name}"
+        )
+
+        # Đọc ảnh
+        image = cv2.imread(
+            str(image_path)
+        )
+
+        if image is None:
+
+            print(
+                f"  [SKIP] Không đọc được: "
+                f"{image_path}"
+            )
+
+            continue
+
+        try:
+
+            # Chạy thuật toán
+            result = run_method(
+                image=image,
+                method=args.method,
+                sigma=args.sigma,
+                low=args.low,
+                high=args.high
+            )
+
+            # Tên file output
+            output_file = (
+                output_dir
+                / f"{image_path.stem}_{args.method}.png"
+            )
+
+            # Lưu ảnh
+            cv2.imwrite(
+                str(output_file),
+                result
+            )
+
+            print(
+                f"  [OK] → {output_file}"
+            )
+
+        except Exception as e:
+
+            print(
+                f"  [ERROR] {image_path.name}: "
+                f"{e}"
+            )
+
+    print()
+    print("=" * 60)
+    print("HOÀN TẤT!")
+    print(
+        f"Kết quả nằm trong: {output_dir}"
+    )
+    print("=" * 60)
 
 
 if __name__ == "__main__":
